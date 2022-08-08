@@ -1,0 +1,253 @@
+unit untCadastroCliente;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtCtrls, Data.DB,
+  Datasnap.DBClient, ACBrBase, ACBrMail, Vcl.Mask, Vcl.DBCtrls;
+
+type
+  TForm1 = class(TForm)
+    Label1: TLabel;
+    edtCodigo: TEdit;
+    Label2: TLabel;
+    edtNome: TEdit;
+    Label3: TLabel;
+    edtIdentidade: TEdit;
+    Label4: TLabel;
+    Label5: TLabel;
+    Label6: TLabel;
+    edtEmail: TEdit;
+    Label7: TLabel;
+    Label8: TLabel;
+    edtLogradouro: TEdit;
+    Label9: TLabel;
+    edtNumero: TEdit;
+    Label10: TLabel;
+    edtCompl: TEdit;
+    Label11: TLabel;
+    edtBairro: TEdit;
+    Label12: TLabel;
+    edtCidade: TEdit;
+    Label13: TLabel;
+    Label14: TLabel;
+    edtPais: TEdit;
+    Panel1: TPanel;
+    Button1: TButton;
+    ACBrMail1: TACBrMail;
+    edtCPF: TMaskEdit;
+    edtFone: TMaskEdit;
+    edtCep: TMaskEdit;
+    cmbUF: TComboBox;
+    btnCancelar: TButton;
+    procedure edtCepExit(Sender: TObject);
+    procedure Button1Click(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+  private
+    { Private declarations }
+    function retiraMascara(pMascara : string): string;
+    procedure CriaCampos;
+    procedure LimpaCampos;
+    procedure GravaDados;
+    procedure EnviarEmail;
+    procedure SalvaXml;
+    procedure GeraCodigo;
+  public
+    { Public declarations }
+  end;
+var
+  Form1: TForm1;
+  ClientDataSet: TClientDataSet;
+implementation
+
+uses untBuscaCep;
+
+{$R *.dfm}
+
+procedure TForm1.Button1Click(Sender: TObject);
+begin
+  if ClientDataSet.Locate('CODIGO', edtCodigo.Text, []) then
+    raise Exception.Create('Este Código já foi adicionado')
+  else
+    GravaDados;
+
+  EnviarEmail;
+  LimpaCampos;
+  GeraCodigo;
+end;
+
+procedure TForm1.edtCepExit(Sender: TObject);
+var
+  Cep: Integer;
+  Endereco: TStringList;
+  CEPValido, CEPFoiMudado: Boolean;
+  NovoCEP: Integer;
+begin
+  cep := StrToInt(retiraMascara(edtCep.Text));
+
+  Endereco := BuscarCEPNoViaCEP(IntToStr(cep));
+      if Endereco.Count = 5 then // Checar se realmente foram recebido 5 valores.
+      begin
+        edtLogradouro.Text := Endereco[0];
+        edtBairro.Text := Endereco[1];
+        cmbUF.Text := Endereco[2];
+        edtCidade.Text := Endereco[3];
+      end;
+      
+end;
+
+procedure TForm1.EnviarEmail;
+var
+  Dir,
+  ArqXML: String;
+  MS: TMemoryStream;
+begin
+
+  Dir := ExtractFilePath(ParamStr(0));
+  try
+    ACBrMail1.From := 'diogodefreitas83@gmail.com';
+    ACBrMail1.FromName := 'Confirmação de cadastro';
+    ACBrMail1.Host := 'smtp.gmail.com'; // troque pelo seu servidor smtp
+    ACBrMail1.Username := 'diogodefreitas83@gmail.com';
+    ACBrMail1.Password := 'bywptdazhxknzhre';
+    ACBrMail1.Port := '587'; // troque pela porta do seu servidor smtp
+    ACBrMail1.SetTLS := True;
+    ACBrMail1.AddAddress(edtEmail.Text,'');
+    ACBrMail1.Subject := 'Teste Info Sistemas'; // assunto
+    ACBrMail1.IsHTML := True; // define que a mensagem é html
+    // mensagem principal do e-mail. pode ser html ou texto puro
+    ACBrMail1.Body.Text :=
+    '<html>'+#13+#10+
+    '<head>'+#13+#10+#13+#10+
+    '  <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">'+#13+#10+
+    '</head>'+#13+#10+
+    '<body text="#000000" bgcolor="#FFFFFF">'+#13+#10+
+    '<h1>Dados do Cliente</h1><br>'+
+    '<h2>Código: ' +edtCodigo.Text+ ' '+#13+#10+
+    '<h2>Nome: ' +edtNome.Text+ ' '+#13+#10+
+    '<h2>RG: ' +edtIdentidade.Text+ ' '+#13+#10+
+    '<h2>CPF: ' +edtCPF.Text+ ' '+#13+#10+
+    '<h2>Telefone: ' +edtFone.Text+ ' '+#13+#10+
+    '<h2>Email: ' +edtEmail.Text+ ' '+#13+#10+
+    '<h2>CEP: ' +edtCep.Text+ ' '+#13+#10+
+    '<h2>Logradouro: ' +edtLogradouro.Text+ ' '+#13+#10+
+    '<h2>Número: ' +edtNumero.Text+ ' '+#13+#10+
+    '<h2>Complemento: ' +edtCompl.Text+ ' '+#13+#10+
+    '<h2>Bairro: ' +edtBairro.Text+ ' '+#13+#10+
+    '<h2>Cidade: ' +edtCidade.Text+ ' '+#13+#10+
+    '<h2>Estado: ' +cmbUF.Text+ ' '+#13+#10+
+    '<h2>Pais: ' +edtPais.Text+ ' '+#13+#10+
+
+    '</body>'+#13+#10+
+    '</html>'+#13+#10;
+
+    ArqXML := '00' + edtCodigo.Text + '.xml';
+    MS := TMemoryStream.Create;
+    MS.LoadFromFile(Dir + ArqXML);
+    ACBrMail1.AddAttachment(MS, ArqXML, adAttachment);
+
+    ACBrMail1.Send;
+
+    MessageDlg('Email enviado com sucesso!', mtInformation, [mbOK], 0);
+  Except
+    raise Exception.Create('Ocorreu um erro no envio do email');
+  end;
+  MS.Free;
+end;
+
+procedure TForm1.FormCreate(Sender: TObject);
+begin
+  ClientDataSet := TClientDataSet.Create(nil);
+
+  CriaCampos;
+  GeraCodigo;
+end;
+
+procedure TForm1.GeraCodigo;
+begin
+  if ClientDataSet.FieldByName('CODIGO').AsInteger = 0 then
+    edtCodigo.Text := IntToStr(1)
+  else
+    edtCodigo.Text := IntToStr(ClientDataSet.FieldByName('CODIGO').AsInteger + 1);
+
+
+end;
+
+procedure TForm1.GravaDados;
+begin
+  try
+    ClientDataSet.Append;
+    ClientDataSet.FieldByName('CODIGO').AsInteger := StrToInt(edtCodigo.Text);
+    ClientDataSet.FieldByName('NOME').AsString := edtNome.Text;
+    ClientDataSet.FieldByName('IDENTIDADE').AsString := edtIdentidade.Text;;
+    ClientDataSet.FieldByName('CPF').AsString := retiraMascara(edtCPF.Text);
+    ClientDataSet.FieldByName('TELEFONE').AsString := retiraMascara(edtFone.Text);
+    ClientDataSet.FieldByName('EMAIL').AsString := edtEmail.Text;
+    ClientDataSet.FieldByName('CEP').AsString := retiraMascara(edtCep.Text);
+    ClientDataSet.FieldByName('LOGRADOURO').AsString := edtLogradouro.Text;
+    ClientDataSet.FieldByName('NUMERO').AsInteger := StrToInt(edtNumero.Text);
+    ClientDataSet.FieldByName('COMPLEMENTO').AsString := edtCompl.Text;
+    ClientDataSet.FieldByName('BAIRRO').AsString := cmbUF.Text;
+    ClientDataSet.FieldByName('CIDADE').AsString := edtCidade.Text;
+    ClientDataSet.FieldByName('ESTADO').AsString := cmbUF.Text;
+    ClientDataSet.FieldByName('PAIS').AsString := edtPais.Text;
+
+    ClientDataSet.Post;
+
+    SalvaXml;
+
+    MessageDlg('Cadastro salvo com sucesso!', mtInformation, [mbOK], 0)
+
+  except
+    raise Exception.Create('Ocorreu um erro ao Salvar os dados do cliente');
+  end;
+end;
+
+procedure TForm1.LimpaCampos;
+var
+  i: Integer;
+begin
+  for i := 0 to Form1.ComponentCount -1 do
+  begin
+    if Form1.Components[i] is TEdit then
+      TEdit(Form1.Components[i]).Clear
+    else if Form1.Components[i] is TMaskEdit then
+      TMaskEdit(Form1.Components[i]).Clear;
+  end;
+end;
+
+function TForm1.retiraMascara(pMascara: string): string;
+begin
+  pMascara := StringReplace(pMascara, '-', '', [rfReplaceAll]);
+  pMascara := StringReplace(pMascara, '.', '', [rfReplaceAll]);
+  pMascara := StringReplace(pMascara, '(', '', [rfReplaceAll]);
+  pMascara := StringReplace(pMascara, ')', '', [rfReplaceAll]);
+  Result := pMascara;
+end;
+
+procedure TForm1.SalvaXml;
+begin
+  ClientDataSet.SaveToFile('C:\Users\Dell\Desktop\Testes Delphi\info\Win32\Debug\00' + edtCodigo.Text + '.xml', dfXMLUTF8);
+end;
+
+procedure TForm1.CriaCampos;
+begin
+  ClientDataSet.FieldDefs.Add('CODIGO', ftInteger);
+  ClientDataSet.FieldDefs.Add('NOME', ftString, 80);
+  ClientDataSet.FieldDefs.Add('IDENTIDADE', ftString, 10);
+  ClientDataSet.FieldDefs.Add('CPF', ftString, 11);
+  ClientDataSet.FieldDefs.Add('TELEFONE', ftString, 11);
+  ClientDataSet.FieldDefs.Add('EMAIL', ftString, 80);
+  ClientDataSet.FieldDefs.Add('CEP', ftString, 8);
+  ClientDataSet.FieldDefs.Add('LOGRADOURO', ftString, 80);
+  ClientDataSet.FieldDefs.Add('NUMERO', ftInteger);
+  ClientDataSet.FieldDefs.Add('COMPLEMENTO', ftString, 60);
+  ClientDataSet.FieldDefs.Add('BAIRRO', ftString, 80);
+  ClientDataSet.FieldDefs.Add('CIDADE', ftString, 80);
+  ClientDataSet.FieldDefs.Add('ESTADO', ftString, 2);
+  ClientDataSet.FieldDefs.Add('PAIS', ftString, 60);
+  ClientDataSet.CreateDataSet;
+end;
+
+end.
